@@ -1,0 +1,70 @@
+The code has been broken up into fairly simple pieces, which should allow
+great flexibility and speed.
+
+	subroutine s_createfn
+	subroutine s_evaluatefn
+  	subroutine s_evaluateerr
+	subroutine s_destroyfn
+
+The Fortran90 Interface blocks would look like
+
+	interface
+
+
+	subroutine s_createfn(func, vars, funcnumber, error)
+		character(len = *), intent(in) :: func, vars
+		integer, intent(out) :: funcnumber
+		character(len=*), intent(out), optional :: error
+	end subroutine
+
+
+	subroutine s_evaluatefn(funcnumber, varvals, number, error)
+		integer, intent(in) :: funcnumber
+		real(fdp), dimension(:), intent(in) :: varvals
+		real(fdp), intent(out) :: number
+		character(len=*), intent(out), optional :: error
+	end subroutine
+
+
+	subroutine s_evaluateerr(funcnumber, varvals, number, error)
+		integer, intent(in) :: funcnumber
+		real(fdp), dimension(:), intent(in) :: varvals
+		real(fdp), intent(out) :: number
+		character(len=*), intent(out), optional :: error
+	end subroutine
+
+
+	subroutine s_destroyfn(funcnumber)
+		integer, intent(in) :: funcnumber
+	end subroutine
+
+
+	end interface
+
+where
+
+	fdp = 8		Double precision float
+
+So, as an example you could do
+
+	read(*,'(a)') f1
+
+	call s_createfn(f1, 'x[0.1] y[0.01] z[0.02]', funcnum1, error)
+
+	write(*,*) trim(error)
+
+	call s_evaluatefn(funcnum1, (/1.0d0, 2.0d0, 3.0d0/), r, error)
+
+	write(*,*) r
+
+	call s_evaluateerr(funcnum1, (/1.0d0, 2.0d0, 3.0d0/), e, error)
+
+	write(*,*) e
+
+	call s_destroyfn(funcnum1)
+
+
+
+Once you have created a function and have a function number for it, that function will remained stored in memory in an optimised fashon until you destroy it or exit the program.
+
+The basic idea is that you load in a function from some input (STDIN or text file) and call s_createfn which basically parses the text function into an internal representation for fast execution.  Then, whenever you need that function computed for various values of the input variables, you call s_evaluatefn.  Once you have finished, you call s_destroyfn and exit the program.

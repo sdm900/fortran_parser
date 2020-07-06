@@ -1,0 +1,44 @@
+*********************************************************************
+
+This software is provided AS IS with NO WARRANTY.
+
+*********************************************************************
+
+Just a short readme to give a few examples.
+
+To compile the test program, I use
+
+	f90 precision.f90 interpreter.f90 test.f90 -o test
+
+Now, the test code only accepts 2 variables 
+
+	  real(fdp), dimension(2) :: t
+
+See the dimension(2) bit... if you want test for more variables, change the 
+2 to say 4.
+
+Anyway, once the code is compiled, here is a test run
+
+	./test
+	x^2+y
+	x y
+	3 7.01
+	   16.0100000000000
+
+So, the function is entered in, the variables are space seperated and the
+numbers are space seperated (entering in a real vector).
+
+The function and variables line are just strings 50 characters long.
+
+Example:
+
+	./test
+	(exp(sin(x)**2))^2+sin(cos(sqrt(y+13)))
+	x y
+	3.1 -2
+	  0.170346110690791
+
+I hope this helps.
+
+Stu.
+
