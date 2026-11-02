@@ -148,6 +148,9 @@ program check
   real(fdp) :: w, x, y, z, r, e
   real(fdp) :: a(100)
   integer :: i
+  integer :: fn2
+  integer :: fns(12)
+  character(len=4000) :: flong
 
 
   !
@@ -2295,5 +2298,219 @@ program check
   y = 4.1d0
   error = 'x//y, y not int'
   call s_checkfn(f, s, (/ x, y /), eerr=error)
+
+  !
+  ! Test 256 - malformed numbers must report, not abort the host
+  !
+  f = '.'
+  s = ''
+  error = 'Not a number: .'
+  call s_checkfn(f, s, (/ 0.0d0 /), perr=error)
+
+  !
+  ! Test 257
+  !
+  f = '5e'
+  s = ''
+  error = 'Not a number: 5e'
+  call s_checkfn(f, s, (/ 0.0d0 /), perr=error)
+
+  !
+  ! Test 258 - nesting depth cap (would otherwise stack-overflow)
+  !
+  count = count + 1
+  flong = repeat('(', 1500)//'1'//repeat(')', 1500)
+  call s_createfn(flong, '', fn2, error)
+  if (trim(error) == 'Maximum nesting depth exceeded') then
+     write(*,'(i4.4,a)') count, '  Testing(PARSE ERROR)     :  PASSED'
+  else
+     write(*,'(a)') '==============================='
+     write(*, '(a,i4.4)') 'Test(ERROR): ', count
+     write(*,'(a)') '**** ERROR:         FAIL'
+     write(*,'(a)') '==============================='
+  end if
+  if (fn2 > 0) call s_destroyfn(fn2)
+
+  !
+  ! Test 259 - besy0 needs x > 0
+  !
+  f = 'besy0(x)'
+  s = 'x'
+  x = -1.0d0
+  error = 'besy0(x), x/>0'
+  call s_checkfn(f, s, (/x/), eerr=error)
+
+  !
+  ! Test 260 - besy1 needs x > 0
+  !
+  f = 'besy1(x)'
+  s = 'x'
+  x = -1.0d0
+  error = 'besy1(x), x/>0'
+  call s_checkfn(f, s, (/x/), eerr=error)
+
+  !
+  ! Test 261 - besk0 needs x > 0
+  !
+  f = 'besk0(x)'
+  s = 'x'
+  x = -1.0d0
+  error = 'besk0(x), x/>0'
+  call s_checkfn(f, s, (/x/), eerr=error)
+
+  !
+  ! Test 262 - besk1 needs x > 0
+  !
+  f = 'besk1(x)'
+  s = 'x'
+  x = -1.0d0
+  error = 'besk1(x), x/>0'
+  call s_checkfn(f, s, (/x/), eerr=error)
+
+  !
+  ! Test 263 - beskn needs x > 0
+  !
+  f = 'beskn(x, y)'
+  s = 'x y'
+  x = 3.0d0
+  y = -1.0d0
+  error = 'beskn(n, x), x/>0'
+  call s_checkfn(f, s, (/x, y/), eerr=error)
+
+  !
+  ! Test 264 - bessel orders are loop bounds: cap the magnitude
+  !
+  f = 'besjn(x, y)'
+  s = 'x y'
+  x = 2000000.0d0
+  y = 1.0d0
+  error = 'besjn(n, x), |n| too large'
+  call s_checkfn(f, s, (/x, y/), eerr=error)
+
+  !
+  ! Test 265 - gamma pole at 0
+  !
+  f = 'gamma(x)'
+  s = 'x'
+  x = 0.0d0
+  error = 'gamma(x), x is 0 or negative integer'
+  call s_checkfn(f, s, (/x/), eerr=error)
+
+  !
+  ! Test 266 - gamma pole at negative integers
+  !
+  f = 'gamma(x)'
+  s = 'x'
+  x = -2.0d0
+  error = 'gamma(x), x is 0 or negative integer'
+  call s_checkfn(f, s, (/x/), eerr=error)
+
+  !
+  ! Test 267 - gamma magnitude cap (protects internal loops)
+  !
+  f = 'gamma(x)'
+  s = 'x'
+  x = 300.0d0
+  error = 'gamma(x), |x| too large'
+  call s_checkfn(f, s, (/x/), eerr=error)
+
+  !
+  ! Test 268 - x//y operand magnitude cap (int() overflow)
+  !
+  f = 'x//y'
+  s = 'x y'
+  x = 3.0d9
+  y = 2.0d0
+  error = 'x//y, |x| or |y| too large'
+  call s_checkfn(f, s, (/x, y/), eerr=error)
+
+  !
+  ! Test 269 - x%y operand magnitude cap (int() overflow)
+  !
+  f = 'x%y'
+  s = 'x y'
+  x = 3.0d9
+  y = 2.0d0
+  error = 'x%y, |x| or |y| too large'
+  call s_checkfn(f, s, (/x, y/), eerr=error)
+
+  !
+  ! Test 270 - short varvals array must report, not over-read
+  !
+  count = count + 1
+  call s_createfn('x+y', 'x y', fn2, error)
+  call s_evaluatefn(fn2, (/1.0d0/), r, error)
+  if (trim(error) == 'Too few variable values') then
+     write(*,'(i4.4,a)') count, '  Testing(ERROR)           :  PASSED'
+  else
+     write(*,'(a)') '==============================='
+     write(*, '(a,i4.4)') 'Test(ERROR): ', count
+     write(*,'(a)') '**** ERROR:         FAIL'
+     write(*,'(a)') '==============================='
+  end if
+  if (fn2 > 0) call s_destroyfn(fn2)
+
+  !
+  ! Test 271 - destroy of a nonexistent function reports
+  !
+  count = count + 1
+  call s_destroyfn(999999, error)
+  if (trim(error) == 'Function does not exist') then
+     write(*,'(i4.4,a)') count, '  Testing(ERROR)           :  PASSED'
+  else
+     write(*,'(a)') '==============================='
+     write(*, '(a,i4.4)') 'Test(ERROR): ', count
+     write(*,'(a)') '**** ERROR:         FAIL'
+     write(*,'(a)') '==============================='
+  end if
+
+  !
+  ! Test 272 - if() is eager: errors in the untaken branch still report
+  !
+  f = 'if(x,1,1/y)'
+  s = 'x y'
+  x = 1.0d0
+  y = 0.0d0
+  error = 'x/y, y=0'
+  call s_checkfn(f, s, (/x, y/), eerr=error)
+
+  !
+  ! Test 273 - floor of huge values is exact (no int overflow)
+  !
+  f = 'floor(x)'
+  s = 'x'
+  x = 1.0d19
+  r = 1.0d19
+  call s_checkfn(f, s, (/x/), res=r)
+
+  !
+  ! Test 274 - arity survives cache regrow (more than 10 live functions)
+  !
+  count = count + 1
+  fns = 0
+  do i = 1, 12
+     call s_createfn('x+y', 'x y', fns(i), error)
+     if (trim(error) /= 'OK') exit
+  end do
+  call s_evaluatefn(fns(1), (/1.0d0/), r, error)
+  if (trim(error) /= 'Too few variable values') then
+     write(*,'(a)') '==============================='
+     write(*, '(a,i4.4)') 'Test(ERROR): ', count
+     write(*,'(a)') '**** ERROR:         FAIL'
+     write(*,'(a)') '==============================='
+  else
+     call s_evaluatefn(fns(1), (/1.0d0, 2.0d0/), r, error)
+     if (trim(error) == 'OK' .and. r == 3.0d0) then
+        write(*,'(i4.4,a)') count, '  Testing(ERROR)           :  PASSED'
+     else
+        write(*,'(a)') '==============================='
+        write(*, '(a,i4.4)') 'Test(ERROR): ', count
+        write(*,'(a)') '**** ERROR:         FAIL'
+        write(*,'(a)') '==============================='
+     end if
+  end if
+  do i = 1, 12
+     if (fns(i) > 0) call s_destroyfn(fns(i))
+  end do
 
 end program check

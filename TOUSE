@@ -68,3 +68,23 @@ So, as an example you could do
 Once you have created a function and have a function number for it, that function will remained stored in memory in an optimised fashon until you destroy it or exit the program.
 
 The basic idea is that you load in a function from some input (STDIN or text file) and call s_createfn which basically parses the text function into an internal representation for fast execution.  Then, whenever you need that function computed for various values of the input variables, you call s_evaluatefn.  Once you have finished, you call s_destroyfn and exit the program.
+
+s_destroyfn optionally returns an error string, e.g. when the function
+number does not exist.
+
+Notes on inputs:
+
+- varvals must hold at least as many values as there are variables in
+  vars (in the same order).  A short array is reported as
+  'Too few variable values' instead of being read past the end.
+- Malformed numbers (e.g. '.', '5e') are reported as
+  'Not a number: ...' instead of aborting the program.
+- if(cond, true, false) evaluates all three arguments eagerly: an
+  error in a branch that is not taken is still reported.
+- Nesting deeper than 1000 levels is rejected with
+  'Maximum nesting depth exceeded' instead of overflowing the stack.
+- Domain errors are reported, not silently returned: besy0/besy1/
+  besk0/besk1 need x > 0, gamma rejects 0, negative integers and
+  |x| > 200, and bessel orders |n| > 1000000 are rejected.
+- The library keeps global state: it is not thread-safe.  Serialize
+  concurrent use from multiple threads.

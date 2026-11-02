@@ -1,4 +1,5 @@
-program check
+program bench
+  ! (renamed: check.f90 already defines program check)
 
   !*********************************************************************
   !
@@ -32,4 +33,4 @@ program check
   end do
   write(*,*)r
 
-end program check
+end program bench

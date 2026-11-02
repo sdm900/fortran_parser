@@ -10,6 +10,7 @@ module interpreter
   type cachefn
      real(fdp), dimension(:), pointer :: numbers
      integer, dimension(:), pointer :: commands
+     integer :: numvars
   end type cachefn
 
   character(len=variablelength), dimension(:), allocatable :: variables
@@ -18,6 +19,8 @@ module interpreter
   real(fdp), dimension(:), allocatable :: varerrors
   character(len=errorlength) :: error
   type(cachefn), dimension(:), pointer, save :: cachedfuncs
+  integer, save :: parsedepth = 0
+  integer, parameter :: maxparsedepth = 1000
 
 contains
 
@@ -30,6 +33,7 @@ contains
 
        do i=1, 10
           nullify(cachedfuncs(i)%numbers, cachedfuncs(i)%commands)
+          cachedfuncs(i)%numvars = 0
        end do
 
        firstrun = .false.
@@ -95,7 +99,7 @@ contains
     ! Format the error to the correct precision
     !
 
-    if (number /= 0.0d0) then
+    if (number > 0.0d0) then
        tmp1 = 10.0d0**(floor(log10(number)))
        tmp2 = anint(number/tmp1)
 
@@ -285,7 +289,7 @@ contains
     character(lenfunc), intent(inout) :: func
     integer, intent(out) :: command
     real(fdp), intent(out) :: number
-    integer :: pos
+    integer :: pos, ios
     logical :: dflag, exponent, finish
 
     exponent = .false.
@@ -331,19 +335,33 @@ contains
     end do
 
     if (pos == lenfunc .and. .not. finish) then
-       read(func, *) number
+       read(func, *, iostat=ios) number
 
-       command = number_
+       if (ios /= 0) then
+          call s_seterror('Not a number: '//func)
 
-       func = ''
-       lenfunc = 0
+          func = ''
+          lenfunc = 0
+       else
+          command = number_
+
+          func = ''
+          lenfunc = 0
+       end if
     else
-       read(func(:pos-1), *) number
+       read(func(:pos-1), *, iostat=ios) number
 
-       command = number_
+       if (ios /= 0) then
+          call s_seterror('Not a number: '//func)
 
-       func = func(pos:)
-       lenfunc = lenfunc - pos + 1
+          func = ''
+          lenfunc = 0
+       else
+          command = number_
+
+          func = func(pos:)
+          lenfunc = lenfunc - pos + 1
+       end if
     end if
 
   end subroutine s_readnumber
@@ -548,6 +566,18 @@ contains
     integer :: lentmpfunc, nextcommand, nextorder, newcomponents
     real(fdp) :: nextnumber
 
+    parsedepth = parsedepth + 1
+
+    if (parsedepth > maxparsedepth) then
+       call s_seterror('Maximum nesting depth exceeded')
+
+       func = ''
+       lenfunc = 0
+
+       parsedepth = parsedepth - 1
+       return
+    end if
+
     select case(command)
 
     case(number_, variablestart:variableend)
@@ -579,11 +609,13 @@ contains
        
     case default
        call s_seterror('Unknown input: '//func)
-       
+
        func = ''
        lenfunc = 0
 
     end select
+
+    parsedepth = parsedepth - 1
   end subroutine s_parseatom
 
 
@@ -754,10 +786,12 @@ contains
           if (tmp(1) > 0.0d0) then
              result = tmp(1) ** result
           elseif (tmp(1) < 0.0d0) then
-             if (aint(result) == result) then
-                result = tmp(1) ** nint(result)
-             else
+             if (aint(result) /= result) then
                 call s_seterror('x**y, x<0 and y not integer')
+             else if (abs(result) > real(huge(1), fdp)) then
+                call s_seterror('x**y, |y| too large')
+             else
+                result = tmp(1) ** nint(result)
              end if
           elseif (result /= 0.0d0) then
              result = 0.0d0
@@ -809,6 +843,8 @@ contains
              call s_seterror('x//y, x not int')
           else if (aint(result) /= result) then
              call s_seterror('x//y, y not int')
+          else if (abs(tmp(1)) > real(huge(1), fdp) .or. abs(result) > real(huge(1), fdp)) then
+             call s_seterror('x//y, |x| or |y| too large')
           else if (result /= 0.0d0) then
              result = int(tmp(1)) / int(result)
           else
@@ -822,6 +858,8 @@ contains
              call s_seterror('x%y, x not int')
           else if (aint(result) /= result) then
              call s_seterror('x%y, y not int')
+          else if (abs(tmp(1)) > real(huge(1), fdp) .or. abs(result) > real(huge(1), fdp)) then
+             call s_seterror('x%y, |x| or |y| too large')
           else if (result /= 0.0d0) then
              result = modulo(int(tmp(1)),int(result))
           else
@@ -932,24 +970,38 @@ contains
 
        case(besjn_)
           POP(stack,stackn,tmp(1))
-          if (aint(tmp(1)) == tmp(1)) then
-             result = f_besjn(tmp(1), result)
-          else
+          if (aint(tmp(1)) /= tmp(1)) then
              call s_seterror('besjn(n, x), n not integer')
+          else if (abs(tmp(1)) > 1000000.0d0) then
+             call s_seterror('besjn(n, x), |n| too large')
+          else
+             result = f_besjn(tmp(1), result)
           end if
 
        case(besy0_)
-          result = f_besy0(result)
+          if (result > 0.0d0) then
+             result = f_besy0(result)
+          else
+             call s_seterror('besy0(x), x/>0')
+          end if
 
        case(besy1_)
-          result = f_besy1(result)
+          if (result > 0.0d0) then
+             result = f_besy1(result)
+          else
+             call s_seterror('besy1(x), x/>0')
+          end if
 
        case(besyn_)
           POP(stack,stackn,tmp(1))
-          if (aint(tmp(1)) == tmp(1) .and. result > 0.0d0) then
-             result = f_besyn(tmp(1), result)
+          if (aint(tmp(1)) /= tmp(1)) then
+             call s_seterror('besyn(n, x), n not integer')
+          else if (result <= 0.0d0) then
+             call s_seterror('besyn(n, x), x/>0')
+          else if (abs(tmp(1)) > 1000000.0d0) then
+             call s_seterror('besyn(n, x), |n| too large')
           else
-             call s_seterror('besyn(n, x), n not integer or x/>0')
+             result = f_besyn(tmp(1), result)
           end if
           
        case(logn_)
@@ -975,7 +1027,13 @@ contains
           end if
 
        case(gamma_)
-          result = f_gamma(result)
+          if (result <= 0.0d0 .and. aint(result) == result) then
+             call s_seterror('gamma(x), x is 0 or negative integer')
+          else if (abs(result) > 200.0d0) then
+             call s_seterror('gamma(x), |x| too large')
+          else
+             result = f_gamma(result)
+          end if
 
        case(csch_)
           result = sinh(result)
@@ -1018,24 +1076,38 @@ contains
           
        case(besin_)
           POP(stack,stackn,tmp(1))
-          if (aint(tmp(1)) == tmp(1)) then
-             result = f_besin(tmp(1), result)
-          else
+          if (aint(tmp(1)) /= tmp(1)) then
              call s_seterror('besin(n, x), n not integer')
+          else if (abs(tmp(1)) > 1000000.0d0) then
+             call s_seterror('besin(n, x), |n| too large')
+          else
+             result = f_besin(tmp(1), result)
           end if
 
        case(besk0_)
-          result = f_besk0(result)
-          
+          if (result > 0.0d0) then
+             result = f_besk0(result)
+          else
+             call s_seterror('besk0(x), x/>0')
+          end if
+         
        case(besk1_)
-          result = f_besk1(result)
-          
+          if (result > 0.0d0) then
+             result = f_besk1(result)
+          else
+             call s_seterror('besk1(x), x/>0')
+          end if
+         
        case(beskn_)
           POP(stack,stackn,tmp(1))
-          if (aint(tmp(1)) == tmp(1)) then
-             result = f_beskn(tmp(1), result)
+          if (aint(tmp(1)) /= tmp(1)) then
+             call s_seterror('beskn(n, x), n not integer')
+          else if (result <= 0.0d0) then
+             call s_seterror('beskn(n, x), x/>0')
+          else if (abs(tmp(1)) > 1000000.0d0) then
+             call s_seterror('beskn(n, x), |n| too large')
           else
-             call s_seterror('besjk(n, x), n not integer')
+             result = f_beskn(tmp(1), result)
           end if
 
        case(ierfc_)
@@ -1113,10 +1185,16 @@ contains
           end if
 
        case(floor_)
-          result = floor(result)
+          ! Values this large are already integral in double precision
+          if (abs(result) < 2.0d0**62) then
+             result = real(floor(result, 8), fdp)
+          end if
 
        case(ceiling_)
-          result = ceiling(result)
+          ! Values this large are already integral in double precision
+          if (abs(result) < 2.0d0**62) then
+             result = real(ceiling(result, 8), fdp)
+          end if
 
        case(mod_)
           POP(stack,stackn,tmp(1))
@@ -1170,9 +1248,14 @@ contains
 
        rangeminus = errvals(i)
 
-       number = merge(0.5d0*(numplus*rangeminus**2-numminus*rangeplus**2-&
-            number*(rangeminus+rangeplus)**2)/rangeplus/rangeminus, &
-            0.0d0, (rangeminus /= 0) .and. (rangeplus /= 0))
+       ! MERGE would evaluate the division even when the guard is false,
+       ! so use an explicit branch (safe without -ffpe-trap, fatal with it)
+       if ((rangeminus /= 0) .and. (rangeplus /= 0)) then
+          number = 0.5d0*(numplus*rangeminus**2-numminus*rangeplus**2-&
+               number*(rangeminus+rangeplus)**2)/rangeplus/rangeminus
+       else
+          number = 0.0d0
+       end if
     end if
   end subroutine s_variableerr
   
@@ -1207,10 +1290,12 @@ contains
           do j = 1, n
              tmpcachedfuncs(j)%commands => cachedfuncs(j)%commands
              tmpcachedfuncs(j)%numbers => cachedfuncs(j)%numbers
+             tmpcachedfuncs(j)%numvars = cachedfuncs(j)%numvars
           end do
           
           do j = n+1, size(tmpcachedfuncs)
              nullify(tmpcachedfuncs(j)%commands, tmpcachedfuncs(j)%numbers)
+             tmpcachedfuncs(j)%numvars = 0
           end do
 
           deallocate(cachedfuncs)
@@ -1229,6 +1314,9 @@ contains
        funcstack%numbers = 0.0d0
        funcstackn = 0
        components = 0
+       funcstack%numvars = 0
+       if (error == 'OK' .and. trim(vars) /= "") funcstack%numvars = numvariables
+       parsedepth = 0
 
        call s_parsefn(tmpfunc, lentmpfunc, funcstack, funcstackn, components)
 
@@ -1242,8 +1330,11 @@ contains
 
 
 
-  subroutine s_destroyfn(funcnumber)
+  subroutine s_destroyfn(funcnumber, t_error)
     integer, intent(in) :: funcnumber
+    character(len=*), intent(out), optional :: t_error
+
+    error = 'OK'
 
     call s_firstrun()
 
@@ -1256,6 +1347,8 @@ contains
     else
        call s_seterror('Function does not exist')
     end if
+
+    if (present(t_error)) t_error = error
   end subroutine s_destroyfn
   
   
@@ -1278,10 +1371,14 @@ contains
     if (funcnumber > size(cachedfuncs) .or. funcnumber < 1) then
        call s_seterror('Function does not exist')
     else if (associated(cachedfuncs(funcnumber)%commands)) then
-       funcstack = cachedfuncs(funcnumber)
-       funcstackn = 0
+       if (size(varvals) < cachedfuncs(funcnumber)%numvars) then
+          call s_seterror('Too few variable values')
+       else
+          funcstack = cachedfuncs(funcnumber)
+          funcstackn = 0
 
-       call s_evaluate(funcstack, funcstackn, varvals, number)
+          call s_evaluate(funcstack, funcstackn, varvals, number)
+       end if
     else
        call s_seterror('Function does not exist')
     end if
@@ -1312,44 +1409,55 @@ contains
     if (funcnumber > size(cachedfuncs) .or. funcnumber < 1) then
        call s_seterror('Function does not exist')
     else if (associated(cachedfuncs(funcnumber)%commands)) then
-       funcstack = cachedfuncs(funcnumber)
-       errvals = 0.0d0
-       funcstackn = 0
-       
-       call s_evaluate(funcstack, funcstackn, varvals, num, errvals)
+       if (size(varvals) < cachedfuncs(funcnumber)%numvars) then
+          call s_seterror('Too few variable values')
+       else
+          funcstack = cachedfuncs(funcnumber)
+          errvals = 0.0d0
+          funcstackn = 0
 
-       do i = 1, size(varvals)
-          tmp = num
+          call s_evaluate(funcstack, funcstackn, varvals, num, errvals)
 
-          call s_variableerr(funcstack, tmp, varvals, 1.0d0, i)
+          do i = 1, size(varvals)
+             tmp = num
 
-          number = number + abs(tmp)
+             call s_variableerr(funcstack, tmp, varvals, 1.0d0, i)
+
+             number = number + abs(tmp)
+
+             !
+             ! Compute the error with half the range
+             !
+
+             tmp = num
+
+             call s_variableerr(funcstack, tmp, varvals, 0.5d0, i)
+
+             halfnumber = halfnumber + abs(tmp)
+          end do
 
           !
-          ! Compute the error with half the range
+          ! Return correct precision error
           !
 
-          tmp = num
+          halfnumber = 2.0d0*halfnumber
 
-          call s_variableerr(funcstack, tmp, varvals, 0.5d0, i)
+          call s_errprecision(number)
+          call s_errprecision(halfnumber)
 
-          halfnumber = halfnumber + abs(tmp)
-       end do
+          !
+          ! Verify error value is consistent
+          !
 
-       !
-       ! Return correct precision error
-       !
-
-       halfnumber = 2.0d0*halfnumber
-
-       call s_errprecision(number)
-       call s_errprecision(halfnumber)
-
-       !
-       ! Verify error value is consistent
-       !
-
-       if (halfnumber /= number) call s_seterror('Error value not stable')
+          if (halfnumber == number) then
+             ! Error value is stable
+          else if (abs(halfnumber-number) <= 1.0d-12*max(abs(halfnumber), abs(number))) then
+             ! Stable up to rounding; exact equality is too fragile
+             ! (e.g. under -ffast-math, which must stay off: see Makefile)
+          else
+             call s_seterror('Error value not stable')
+          end if
+       end if
     else
        call s_seterror('Function does not exist')
     end if
@@ -1383,12 +1491,13 @@ end module interpreter
 
 
 
-  subroutine destroyfn(funcnumber)
+  subroutine destroyfn(funcnumber, t_error)
     use interpreter
 
     integer :: funcnumber
+    character(*), optional :: t_error
 
-    call s_destroyfn(funcnumber)
+    call s_destroyfn(funcnumber, t_error)
   end subroutine destroyfn
 
 

@@ -78,7 +78,7 @@ The interpreter does 61 functions
     floor(x)
     ceiling(y)
 
-16 operators
+17 operators
 
     +
     -

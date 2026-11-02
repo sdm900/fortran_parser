@@ -11,8 +11,13 @@ Legacy Fortran 90 runtime string-expression parser. No package manager, CI, lint
 ## Build / test (root `Makefile`)
 
 - `make lib` → `libparse.a` (via `obj/`). `make bin` → `./check` binary (misnomer: target is `bin`, binary is `check`). `make speed` → `./speed` benchmark. `make clean` removes `obj/*`, `libparse.a`, `check`, `speed`.
-- Run regression: `make bin && ./check` — every line should say `PASSED` (257 checks); any `FAIL` block prints expected vs actual.
-- Bounds checking matters: modern gfortran (15+) with the default `-fbounds-check` traps a latent off-by-one in `s_funcpush` (`interpreter.f90`) that older compilers silently tolerated. Fixed by slicing both sides of the regrow copy (`tmpstack%numbers(:funcstackn-1) = funcstack%numbers(:funcstackn-1)`); do not "simplify" the `>=` to `>` — growing when full guarantees a trailing `end_` sentinel that `s_evaluate`'s `do while(command /= end_)` loop depends on.
+- Run regression: `make bin && ./check` — every line should say `PASSED` (276 checks: 257 original + 19 for input validation and domain guards); any `FAIL` block prints expected vs actual.
+- `s_evaluate` terminates on the first `end_` sentinel; `s_funcpush` grows the stack when full (`>=`) precisely so a trailing sentinel always exists. Keep it that way.
+- Input validation is fail-report, never fail-abort: `s_readnumber` uses `IOSTAT` (`'Not a number: ...'`), recursion depth is capped at 1000 (`'Maximum nesting depth exceeded'`), and `varvals` arity is checked (`'Too few variable values'`). Do not add paths that can abort on bad input.
+- Domain guards live in `s_evaluate`, not `extrafunc`: `besy0/besy1/besk0/besk1` need `x > 0`, `besn*` additionally need integer `|n| <= 1000000` (loop-bound overflow), `gamma` rejects poles and `|x| > 200`. `floor/ceiling` use `kind=8` + a `2**62` fast path to avoid 32-bit `int` overflow; `//`/`%`/`**` guard `huge(1)` magnitude.
+- `if(cond, t, f)` is eager: both branches always evaluate, errors included. Documented in `TOUSE`; changing it needs jump opcodes, not a tweak.
+- The library is single-threaded by design (module state: `error`, `variables`, `cachedfuncs`, save `stack` in `s_evaluate`). Never add threads without removing that state first.
+- Keep precise FP semantics: the Makefile's commented `-ffast-math` alternatives must stay off (NaN guards + the `s_evaluateerr` stability comparison depend on it).
 - Default `F90FLAGS = -g -cpp -fbounds-check -fstack-check -pedantic-errors -Wuninitialized`. Keep `-cpp`: `extrafunc.f90` relies on `#ifdef SYSBESSEL/SYSGAMMA/SYSLGAMMA/SYSERF` to switch between bundled approximations and system intrinsics (default: bundled).
 - `make export` runs `cpp` over sources into `exportsrc/` — release artifact only, not part of normal dev loop.
 

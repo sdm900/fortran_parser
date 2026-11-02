@@ -27,6 +27,9 @@ DIRS =		$(OBJDIR)
 F90COMPILER =	gfortran
 F90FLAGS =	-g -cpp -fbounds-check -fstack-check -pedantic-errors -Wuninitialized
 #F90FLAGS =      -cpp -O3 -msse3 -ffast-math -floop-optimize -fprefetch-loop-arrays -funroll-loops -funsafe-math-optimizations
+# NOTE: do not enable -ffast-math/-funsafe-math-optimizations: they break the
+# NaN domain guards, the error-stability comparison in s_evaluateerr, and the
+# exact float comparisons the test suite pins. Keep precise FP semantics.
 F90MOD =	-I./$(OBJDIR) -J./$(OBJDIR)
 F90LIBS =	-L. -lparse
 
