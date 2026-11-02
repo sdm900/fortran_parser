@@ -1,0 +1,14 @@
+# Build outputs (see Makefile)
+obj/
+libparse.a
+check
+speed
+exportsrc/
+check_run.log
+
+# Fortran compiler artifacts
+*.o
+*.mod
+
+# simple/ standalone build (build.sh)
+/simple/check
