@@ -190,8 +190,8 @@ contains
 
     if (funcstackn >= size(funcstack%numbers)) then
        allocate(tmpstack%numbers(funcstackn+5), tmpstack%commands(funcstackn+5))
-       tmpstack%numbers(:funcstackn-1) = funcstack%numbers
-       tmpstack%commands(:funcstackn-1) = funcstack%commands
+       tmpstack%numbers(:funcstackn-1) = funcstack%numbers(:funcstackn-1)
+       tmpstack%commands(:funcstackn-1) = funcstack%commands(:funcstackn-1)
        tmpstack%numbers(funcstackn:) = 0.0d0
        tmpstack%commands(funcstackn:) = end_
        deallocate(funcstack%numbers, funcstack%commands)
