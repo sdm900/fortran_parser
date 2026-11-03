@@ -179,4 +179,67 @@ If you have any problems, let me know.
 
 Stu.
 
+******************************************************
+
+HISTORY AND RELATED FUNCTION PARSERS
+
+This parser (the "Australian parser") is one of three independent
+Fortran expression parsers that coexisted in the mid-2000s, each written
+from scratch for the same job: evaluating a user-supplied function
+string for a large number of variable values, e.g. inside iterative
+curve fitting, where parsing once and evaluating many times is
+everything.  The other two lines are the "German parser" by Roland
+Schmehl and the Brazilian parser by Wilton Pereira da Silva and Ivomar
+Brito Soares, written for the LAB Fit curve fitting software.
+
+The cut-down direct evaluator in the simple/ subdirectory of this repo
+is the original version.  It is the version the LAB Fit authors found
+on the internet, tried, and measured as too slow for non-linear
+regression (their 2007 comparative report benchmarks it as the
+"Australian parser (Stuart Midgley)").  The faster byte-code compiling
+version in the root of this repo -- parse the string once into byte
+code with s_createfn, then evaluate it repeatedly with s_evaluatefn --
+was developed around the same time, for the same reason.  The ensuing
+email correspondence with Ivomar is part of this history; his project
+paper cites this code (S. Midgley, Dept. of Physics, University of
+Western Australia) and records all three timings.
+
+None of the codes below is derived from this one (and vice versa);
+they are independent implementations that have cross-referenced and
+benchmarked each other over the years.  The one known direct descendant
+of this parser is fortran_script, also by the same author.
+
+Related codes, with links so readers can compare them all:
+
+- fortran_script (companion to this parser, by the same author):
+  https://github.com/sdm900/fortran_script
+- fparser, the "German parser" by Roland Schmehl (byte-code compiler,
+  initf/parsef/evalf API):
+  http://fparser.sourceforge.net
+  https://sourceforge.net/projects/fparser/
+- fortran_function_parser, Jacob Williams' modernization of Schmehl's
+  fparser (Fortran 2008, fparser class):
+  https://github.com/jacobwilliams/fortran_function_parser
+- FortranParser, Jacopo Chevallard's refactoring of Schmehl's fparser:
+  https://github.com/jacopo-chevallard/FortranParser
+- Fortran Function Parser, the Brazilian parser by Wilton and Ivomar
+  (recursive descent, init/evaluate/destroyfunc API), with the 2007
+  comparative report benchmarking all three parsers:
+  http://www.labfit.net/functionparser.htm
+  http://www.labfit.net/report.htm
+  https://github.com/jacobwilliams/ffp (unofficial mirror)
+- Fortran-Expression-Evaluator, Ivomar's current repository, whose
+  README contains the published paper citing this parser:
+  https://github.com/ivomarb/Fortran-Expression-Evaluator
+- Calmat, a matrix-operations equation parser built on Ivomar's
+  interpreter:
+  https://github.com/hassaniriad/calmat
+- feq-parse, an independent modern equation parser class from
+  FluidNumerics:
+  https://github.com/FluidNumerics/feq-parse
+- M_calculator, John Urban's single-expression evaluator (not a
+  byte-code interpreter):
+  https://github.com/urbanjost/M_calculator
+- A modern multi-parser benchmark page covering several of the above:
+  https://davidpfister.github.io/benchmark.f/example_parsers.html
 
